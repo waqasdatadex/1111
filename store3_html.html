@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BackWerk Ludwigshafen - Store 3</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #27ae60 0%, #2d3436 100%);
+            min-height: 100vh;
+            padding: 15px;
+        }
+        .container {
+            max-width: 420px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 25px 50px rgba(0,0,0,0.15);
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(135deg, #27ae60 0%, #00b894 100%);
+            color: white;
+            text-align: center;
+            padding: 25px 20px;
+            position: relative;
+        }
+        .store-badge {
+            position: absolute;
+            top: 10px;
+            left: 15px;
+            background: rgba(255,255,255,0.2);
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 11px;
+            font-weight: 600;
+            z-index: 2;
+        }
+        .logout-btn {
+            position: absolute;
+            top: 10px;
+            right: 15px;
+            background: rgba(255,255,255,0.2);
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            cursor: pointer;
+            z-index: 2;
+        }
+        .shop-name {
+            font-size: 28px;
+            font-weight: 800;
+            margin-bottom: 5px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        .shop-subtitle {
+            font-size: 14px;
+            opacity: 0.9;
+            font-weight: 300;
+        }
+        .content { padding: 30px 25px; }
+        .login-container { display: block; }
+        .app-container { display: none; }
+        .login-form {
+            background: #f8f9fb;
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 20px;
+        }
+        .form-group { margin-bottom: 20px; }
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+            font-size: 16px;
+        }
+        .form-input {
+            width: 100%;
+            padding: 16px;
+            border: 2px solid #e1e5e9;
+            border-radius: 12px;
+            font-size: 16px;
+            background: white;
+            transition: all 0.3s ease;
+        }
+        .form-input:focus {
+            outline: none;
+            border-color: #27ae60;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(39, 174, 96, 0.3);
+        }
+        .login-btn {
+            width: 100%;
+            padding: 18px;
+            background: linear-gradient(135deg, #27ae60 0%, #00b894 100%);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .status-message {
+            text-align: center;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            font-weight: 600;
+            display: none;
+        }
+        .status-message.success {
+            background: #d4edda;
+            color: #155724;
+            display: block;
+        }
+        .status-message.error {
+            background: #f8d7da;
+            color: #721c24;
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="store-badge">STORE 3</div>
+            <div class="shop-name">BackWerk Ludwigshafen</div>
+            <div class="shop-subtitle">Store 3 - Employee Time System</div>
+            <button class="logout-btn" id="logoutBtn" onclick="logout()" style="display: none;">Logout</button>
+        </div>
+        
+        <div class="content">
+            <div class="login-container" id="loginContainer">
+                <div class="login-form">
+                    <div style="text-align: center; margin-bottom: 20px; padding: 15px; background: #e7f3ff; border-radius: 10px;">
+                        <strong>Store 3: Ludwigshafen</strong><br>
+                        <small>Part of 3-Store BackWerk Network</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="username">Username:</label>
+                        <input type="text" id="username" class="form-input" placeholder="Enter your username">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="password">Password:</label>
+                        <input type="password" id="password" class="form-input" placeholder="Enter your password">
+                    </div>
+                    
+                    <button class="login-btn" id="loginBtn" onclick="attemptLogin()">
+                        Login to Store 3
+                    </button>
+                </div>
+                
+                <div class="status-message" id="loginStatusMessage"></div>
+            </div>
+
+            <div class="app-container" id="appContainer">
+                <div style="text-align: center; padding: 20px; background: #d4edda; border-radius: 10px;">
+                    Store 3 app interface would appear here after login
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const STORE_CONFIG = {
+            storeId: 'STORE_3',
+            storeName: 'BackWerk Ludwigshafen',
+            storeCode: 'LUD'
+        };
+
+        const GOOGLE_SCRIPT_URL = 'YOUR_GOOGLE_SCRIPT_URL_HERE';
+
+        async function attemptLogin() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            
+            if (!username || !password) {
+                showLoginMessage('Please enter credentials', 'error');
+                return;
+            }
+            
+            try {
+                const formData = new FormData();
+                formData.append('action', 'login');
+                formData.append('username', username);
+                formData.append('password', password);
+                formData.append('storeId', STORE_CONFIG.storeId);
+                
+                const response = await fetch(GOOGLE_SCRIPT_URL, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (result.status === 'success') {
+                    showMainApp();
+                    showLoginMessage('Welcome to Store 3!', 'success');
+                } else {
+                    throw new Error(result.message);
+                }
+                
+            } catch (error) {
+                showLoginMessage('Login failed: ' + error.message, 'error');
+            }
+        }
+
+        function showMainApp() {
+            document.getElementById('loginContainer').style.display = 'none';
+            document.getElementById('appContainer').style.display = 'block';
+            document.getElementById('logoutBtn').style.display = 'block';
+        }
+
+        function logout() {
+            localStorage.removeItem('backwerk_STORE_3_token');
+            location.reload();
+        }
+
+        function showLoginMessage(message, type) {
+            const statusEl = document.getElementById('loginStatusMessage');
+            statusEl.textContent = message;
+            statusEl.className = `status-message ${type}`;
+        }
+    </script>
+</body>
+</html>
