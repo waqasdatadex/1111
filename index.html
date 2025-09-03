@@ -991,17 +991,6 @@
             document.getElementById('adminControls').style.display = 'none';
             document.getElementById('managerDashboard').style.display = 'none';
             document.getElementById('adminMode').checked = false;
-            
-            // Remove employee info display if it exists
-            const existingInfo = document.querySelector('.employee-info-display');
-            if (existingInfo) {
-                existingInfo.remove();
-            }
-            
-            // Show dropdowns again
-            document.querySelector('.store-select').style.display = 'block';
-            document.querySelector('.employee-select').style.display = 'block';
-            
             clearStatusMessage();
             clearRecordsDisplay();
         }
@@ -1202,8 +1191,17 @@
 
         // Records display functions
         function loadRecordsForEmployee() {
-            const store = document.getElementById('storeSelect').value;
-            const employee = document.getElementById('employee').value;
+            let store, employee;
+            
+            if (currentUser.role === 'Employee') {
+                // For employees, use their fixed store and name
+                store = currentUser.stores[0];
+                employee = currentUser.name;
+            } else {
+                // For managers/owner, use dropdown values
+                store = document.getElementById('storeSelect').value;
+                employee = document.getElementById('employee').value;
+            }
             
             if (!store || !employee) {
                 clearRecordsDisplay();
