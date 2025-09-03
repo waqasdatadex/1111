@@ -1,386 +1,767 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BackWerk Time Entry Form</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+/**
+ * BackWerk Multi-Store Employee Time Tracker
+ * Google Apps Script for automatic spreadsheet creation and data management
+ * 
+ * FIXED VERSION - Ensures all tabs are created properly
+ */
 
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 20px;
-        }
+// Configuration
+const SPREADSHEET_NAME = 'BackWerk Time Tracker - Employee Hours';
+const SCRIPT_PROPERTY_KEY = 'BACKWERK_SPREADSHEET_ID';
 
-        .container {
-            background: white;
-            border-radius: 20px;
-            padding: 40px;
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
-            width: 100%;
-            max-width: 500px;
-            backdrop-filter: blur(10px);
-        }
+// Store configurations
+const STORES = {
+  'BackWerk Frankenthal': {
+    employees: ['Waqas', 'Yan', 'Gizem', 'Irfan', 'Najat', 'Atta', 'Ayesha', 'Melek'],
+    color: '#ff6b6b'
+  },
+  'BackWerk Offenburg': {
+    employees: ['Shazia', 'Kamran', 'Hussain', 'Mohan', 'Nilab', 'Nandini'],
+    color: '#4ecdc4'
+  },
+  'BackWerk Karlsruhe': {
+    employees: ['Furqan', 'Hamza', 'Dilpreet', 'Yaseen'],
+    color: '#45b7d1'
+  },
+  'Back-Factory Karlsruhe': {
+    employees: ['Nabeel', 'Lubna', 'Nosheen', 'Rabia'],
+    color: '#feca57'
+  }
+};
 
-        .header {
-            text-align: center;
-            margin-bottom: 30px;
-        }
+/**
+ * STEP 1: RUN THIS FIRST - Initialize the complete system
+ */
+function initializeBackWerkTimeTracker() {
+  try {
+    console.log('🚀 Starting BackWerk Time Tracker initialization...');
+    
+    // Check if spreadsheet already exists
+    let spreadsheetId = getStoredSpreadsheetId();
+    let spreadsheet;
+    
+    if (spreadsheetId) {
+      try {
+        spreadsheet = SpreadsheetApp.openById(spreadsheetId);
+        console.log('📊 Found existing spreadsheet:', spreadsheet.getName());
+        console.log('🔄 Recreating all sheets to ensure they exist...');
+      } catch (error) {
+        console.log('⚠️ Stored spreadsheet not accessible, creating new one...');
+        spreadsheet = createNewSpreadsheet();
+      }
+    } else {
+      spreadsheet = createNewSpreadsheet();
+    }
+    
+    // Setup all sheets (this will recreate them if needed)
+    setupAllSheets(spreadsheet);
+    
+    // Verify all sheets were created
+    const sheets = spreadsheet.getSheets();
+    console.log('📋 Created sheets:', sheets.map(s => s.getName()));
+    
+    // Log the spreadsheet URL
+    const url = spreadsheet.getUrl();
+    console.log('✅ BackWerk Time Tracker initialized successfully!');
+    console.log('📋 Spreadsheet URL:', url);
+    console.log('🔑 Spreadsheet ID:', spreadsheet.getId());
+    console.log('📊 Total sheets created:', sheets.length);
+    
+    // Return success response
+    return {
+      success: true,
+      spreadsheetId: spreadsheet.getId(),
+      spreadsheetUrl: url,
+      totalSheets: sheets.length,
+      sheetNames: sheets.map(s => s.getName()),
+      message: 'System initialized successfully! All tabs have been created.'
+    };
+    
+  } catch (error) {
+    console.error('❌ Error initializing system:', error);
+    throw error; // Re-throw so you can see the error
+  }
+}
 
-        .header h1 {
-            color: #2d3748;
-            font-size: 2rem;
-            margin-bottom: 10px;
-            font-weight: 700;
-        }
+/**
+ * Creates a new spreadsheet and stores its ID
+ */
+function createNewSpreadsheet() {
+  const spreadsheet = SpreadsheetApp.create(SPREADSHEET_NAME);
+  const spreadsheetId = spreadsheet.getId();
+  
+  // Store the ID for future use
+  storeSpreadsheetId(spreadsheetId);
+  
+  console.log('📝 Created new spreadsheet:', SPREADSHEET_NAME);
+  console.log('🆔 Spreadsheet ID:', spreadsheetId);
+  
+  // Wait a moment for Google to process the creation
+  Utilities.sleep(1000);
+  
+  return spreadsheet;
+}
 
-        .header p {
-            color: #718096;
-            font-size: 1rem;
-        }
+/**
+ * Sets up ALL sheets in the spreadsheet
+ */
+function setupAllSheets(spreadsheet) {
+  console.log('🔧 Setting up all sheets...');
+  
+  // Get existing sheets
+  const existingSheets = spreadsheet.getSheets();
+  console.log('📋 Existing sheets before setup:', existingSheets.map(s => s.getName()));
+  
+  // Remove default Sheet1 if it exists and we have other sheets to create
+  const defaultSheet = spreadsheet.getSheetByName('Sheet1');
+  if (defaultSheet && existingSheets.length === 1) {
+    // We'll delete it after creating other sheets
+    console.log('🗑️ Will remove default Sheet1 after creating new sheets');
+  }
+  
+  // Create Master Summary sheet FIRST
+  console.log('📊 Creating Master Summary sheet...');
+  createMasterSummarySheet(spreadsheet);
+  
+  // Create individual store sheets
+  console.log('🏪 Creating store sheets...');
+  Object.keys(STORES).forEach(storeName => {
+    console.log(`  📋 Creating sheet for: ${storeName}`);
+    createStoreSheet(spreadsheet, storeName);
+  });
+  
+  // Create Monthly Reports sheet
+  console.log('📈 Creating Monthly Reports sheet...');
+  createMonthlyReportsSheet(spreadsheet);
+  
+  // Create Dashboard sheet
+  console.log('📊 Creating Dashboard sheet...');
+  createDashboardSheet(spreadsheet);
+  
+  // Now delete the default sheet if it still exists
+  const finalDefaultSheet = spreadsheet.getSheetByName('Sheet1');
+  if (finalDefaultSheet) {
+    try {
+      spreadsheet.deleteSheet(finalDefaultSheet);
+      console.log('🗑️ Deleted default Sheet1');
+    } catch (error) {
+      console.log('⚠️ Could not delete Sheet1:', error.message);
+    }
+  }
+  
+  // Final verification
+  const finalSheets = spreadsheet.getSheets();
+  console.log('✅ Final sheets created:', finalSheets.map(s => s.getName()));
+  console.log(`✅ Total sheets: ${finalSheets.length}`);
+}
 
-        .form-group {
-            margin-bottom: 25px;
-        }
+/**
+ * Creates the Master Summary sheet
+ */
+function createMasterSummarySheet(spreadsheet) {
+  const sheetName = '📊 Master Summary';
+  
+  // Delete existing sheet if it exists
+  let sheet = spreadsheet.getSheetByName(sheetName);
+  if (sheet) {
+    spreadsheet.deleteSheet(sheet);
+  }
+  
+  // Create new sheet
+  sheet = spreadsheet.insertSheet(sheetName);
+  
+  // Set up headers
+  const headers = [
+    'Entry ID', 'Date', 'Store', 'Employee', 'Start Time', 'End Time', 
+    'Hours Worked', 'Submitted By', 'Submitted At', 'Status'
+  ];
+  
+  const headerRange = sheet.getRange(1, 1, 1, headers.length);
+  headerRange.setValues([headers]);
+  
+  // Format headers
+  headerRange.setBackground('#4285f4');
+  headerRange.setFontColor('#ffffff');
+  headerRange.setFontWeight('bold');
+  headerRange.setHorizontalAlignment('center');
+  headerRange.setBorder(true, true, true, true, true, true);
+  
+  // Set column widths
+  const columnWidths = [120, 100, 180, 120, 100, 100, 120, 140, 160, 100];
+  columnWidths.forEach((width, index) => {
+    sheet.setColumnWidth(index + 1, width);
+  });
+  
+  // Freeze header row
+  sheet.setFrozenRows(1);
+  
+  // Add some sample formatting
+  sheet.getRange(2, 1, 1, headers.length).setBackground('#f8f9fa');
+  
+  console.log('✅ Master Summary sheet created successfully');
+}
 
-        .form-group label {
-            display: block;
-            margin-bottom: 8px;
-            color: #2d3748;
-            font-weight: 600;
-            font-size: 0.9rem;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
+/**
+ * Creates individual store sheets
+ */
+function createStoreSheet(spreadsheet, storeName) {
+  const sheetName = `🏪 ${storeName}`;
+  
+  // Delete existing sheet if it exists
+  let sheet = spreadsheet.getSheetByName(sheetName);
+  if (sheet) {
+    spreadsheet.deleteSheet(sheet);
+  }
+  
+  // Create new sheet
+  sheet = spreadsheet.insertSheet(sheetName);
+  
+  // Get store config
+  const storeConfig = STORES[storeName];
+  const employees = storeConfig?.employees || [];
+  const storeColor = storeConfig?.color || '#ff6b6b';
+  
+  // Add store title
+  sheet.getRange(1, 1, 1, 7).merge();
+  sheet.getRange(1, 1).setValue(`🏪 ${storeName} - Employee Time Tracking`);
+  sheet.getRange(1, 1).setBackground(storeColor);
+  sheet.getRange(1, 1).setFontColor('#ffffff');
+  sheet.getRange(1, 1).setFontWeight('bold');
+  sheet.getRange(1, 1).setHorizontalAlignment('center');
+  sheet.getRange(1, 1).setFontSize(14);
+  
+  // Employee Summary Section
+  createEmployeeSummarySection(sheet, storeName, employees, storeColor);
+  
+  // Time Entries Section
+  createTimeEntriesSection(sheet, storeColor);
+  
+  // Set column widths
+  const columnWidths = [120, 120, 100, 100, 120, 140, 160];
+  columnWidths.forEach((width, index) => {
+    sheet.setColumnWidth(index + 1, width);
+  });
+  
+  console.log(`✅ Store sheet created: ${storeName}`);
+}
 
-        .form-group input,
-        .form-group select {
-            width: 100%;
-            padding: 15px;
-            border: 2px solid #e2e8f0;
-            border-radius: 12px;
-            font-size: 1rem;
-            transition: all 0.3s ease;
-            background: #f8fafc;
-        }
+/**
+ * Creates employee summary section in store sheet
+ */
+function createEmployeeSummarySection(sheet, storeName, employees, storeColor) {
+  const startRow = 3;
+  
+  // Section title
+  sheet.getRange(startRow, 1, 1, 7).merge();
+  sheet.getRange(startRow, 1).setValue(`👥 Employee Summary - ${storeName}`);
+  sheet.getRange(startRow, 1).setBackground('#f1f3f4');
+  sheet.getRange(startRow, 1).setFontWeight('bold');
+  sheet.getRange(startRow, 1).setHorizontalAlignment('center');
+  
+  // Summary headers
+  const summaryHeaders = ['Employee', 'This Week (hrs)', 'This Month (hrs)', 'Total Hours', 'Last Entry'];
+  const headerRow = startRow + 1;
+  sheet.getRange(headerRow, 1, 1, summaryHeaders.length).setValues([summaryHeaders]);
+  sheet.getRange(headerRow, 1, 1, summaryHeaders.length).setBackground('#e8f0fe');
+  sheet.getRange(headerRow, 1, 1, summaryHeaders.length).setFontWeight('bold');
+  sheet.getRange(headerRow, 1, 1, summaryHeaders.length).setBorder(true, true, true, true, true, true);
+  
+  // Add employee rows
+  employees.forEach((employee, index) => {
+    const row = headerRow + 1 + index;
+    const rowData = [employee, 0, 0, 0, 'No entries yet'];
+    sheet.getRange(row, 1, 1, rowData.length).setValues([rowData]);
+    
+    // Alternate row colors
+    if (index % 2 === 0) {
+      sheet.getRange(row, 1, 1, rowData.length).setBackground('#f8f9fa');
+    }
+    sheet.getRange(row, 1, 1, rowData.length).setBorder(true, true, true, true, false, false);
+  });
+}
 
-        .form-group input:focus,
-        .form-group select:focus {
-            outline: none;
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-            transform: translateY(-2px);
-        }
+/**
+ * Creates time entries section in store sheet
+ */
+function createTimeEntriesSection(sheet, storeColor) {
+  const startRow = 15; // Start after employee summary
+  
+  // Section title
+  sheet.getRange(startRow, 1, 1, 7).merge();
+  sheet.getRange(startRow, 1).setValue('📋 Time Entries');
+  sheet.getRange(startRow, 1).setBackground('#f1f3f4');
+  sheet.getRange(startRow, 1).setFontWeight('bold');
+  sheet.getRange(startRow, 1).setHorizontalAlignment('center');
+  
+  // Time entries headers
+  const entryHeaders = ['Date', 'Employee', 'Start Time', 'End Time', 'Hours Worked', 'Submitted By', 'Submitted At'];
+  const headerRow = startRow + 1;
+  sheet.getRange(headerRow, 1, 1, entryHeaders.length).setValues([entryHeaders]);
+  sheet.getRange(headerRow, 1, 1, entryHeaders.length).setBackground(storeColor);
+  sheet.getRange(headerRow, 1, 1, entryHeaders.length).setFontColor('#ffffff');
+  sheet.getRange(headerRow, 1, 1, entryHeaders.length).setFontWeight('bold');
+  sheet.getRange(headerRow, 1, 1, entryHeaders.length).setBorder(true, true, true, true, true, true);
+  
+  // Add a sample row for formatting
+  const sampleRow = headerRow + 1;
+  sheet.getRange(sampleRow, 1, 1, entryHeaders.length).setBackground('#f8f9fa');
+  sheet.getRange(sampleRow, 1).setValue('Sample entries will appear here');
+}
 
-        .time-inputs {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 15px;
-        }
+/**
+ * Creates Monthly Reports sheet
+ */
+function createMonthlyReportsSheet(spreadsheet) {
+  const sheetName = '📈 Monthly Reports';
+  
+  // Delete existing sheet if it exists
+  let sheet = spreadsheet.getSheetByName(sheetName);
+  if (sheet) {
+    spreadsheet.deleteSheet(sheet);
+  }
+  
+  // Create new sheet
+  sheet = spreadsheet.insertSheet(sheetName);
+  
+  // Add title
+  sheet.getRange(1, 1, 1, 8).merge();
+  sheet.getRange(1, 1).setValue('📈 Monthly Reports - All Stores');
+  sheet.getRange(1, 1).setBackground('#34a853');
+  sheet.getRange(1, 1).setFontColor('#ffffff');
+  sheet.getRange(1, 1).setFontWeight('bold');
+  sheet.getRange(1, 1).setHorizontalAlignment('center');
+  sheet.getRange(1, 1).setFontSize(14);
+  
+  // Set up headers
+  const headers = [
+    'Month/Year', 'Store', 'Employee', 'Total Hours', 'Total Days', 
+    'Average Hours/Day', 'Overtime Hours', 'Status'
+  ];
+  
+  const headerRange = sheet.getRange(3, 1, 1, headers.length);
+  headerRange.setValues([headers]);
+  
+  // Format headers
+  headerRange.setBackground('#34a853');
+  headerRange.setFontColor('#ffffff');
+  headerRange.setFontWeight('bold');
+  headerRange.setHorizontalAlignment('center');
+  headerRange.setBorder(true, true, true, true, true, true);
+  
+  // Set column widths
+  const columnWidths = [120, 180, 120, 120, 100, 140, 120, 100];
+  columnWidths.forEach((width, index) => {
+    sheet.setColumnWidth(index + 1, width);
+  });
+  
+  // Freeze header row
+  sheet.setFrozenRows(3);
+  
+  console.log('✅ Monthly Reports sheet created successfully');
+}
 
-        .submit-btn {
-            width: 100%;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            padding: 18px;
-            border-radius: 12px;
-            font-size: 1.1rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
+/**
+ * Creates Dashboard sheet
+ */
+function createDashboardSheet(spreadsheet) {
+  const sheetName = '🎯 Dashboard';
+  
+  // Delete existing sheet if it exists
+  let sheet = spreadsheet.getSheetByName(sheetName);
+  if (sheet) {
+    spreadsheet.deleteSheet(sheet);
+  }
+  
+  // Create new sheet
+  sheet = spreadsheet.insertSheet(sheetName);
+  
+  // Add title
+  sheet.getRange(1, 1, 1, 6).merge();
+  sheet.getRange(1, 1).setValue('🎯 BackWerk Time Tracker Dashboard');
+  sheet.getRange(1, 1).setBackground('#6c5ce7');
+  sheet.getRange(1, 1).setFontColor('#ffffff');
+  sheet.getRange(1, 1).setFontWeight('bold');
+  sheet.getRange(1, 1).setHorizontalAlignment('center');
+  sheet.getRange(1, 1).setFontSize(16);
+  
+  // Add store summary section
+  let currentRow = 3;
+  sheet.getRange(currentRow, 1, 1, 4).merge();
+  sheet.getRange(currentRow, 1).setValue('📊 Store Summary');
+  sheet.getRange(currentRow, 1).setBackground('#f1f3f4');
+  sheet.getRange(currentRow, 1).setFontWeight('bold');
+  sheet.getRange(currentRow, 1).setHorizontalAlignment('center');
+  
+  currentRow += 2;
+  const storeHeaders = ['Store Name', 'Total Employees', 'Active Today', 'Weekly Hours'];
+  sheet.getRange(currentRow, 1, 1, storeHeaders.length).setValues([storeHeaders]);
+  sheet.getRange(currentRow, 1, 1, storeHeaders.length).setBackground('#ddd6fe');
+  sheet.getRange(currentRow, 1, 1, storeHeaders.length).setFontWeight('bold');
+  sheet.getRange(currentRow, 1, 1, storeHeaders.length).setBorder(true, true, true, true, true, true);
+  
+  // Add store data
+  Object.keys(STORES).forEach((storeName, index) => {
+    const row = currentRow + 1 + index;
+    const employees = STORES[storeName].employees;
+    const rowData = [storeName, employees.length, 0, 0];
+    sheet.getRange(row, 1, 1, rowData.length).setValues([rowData]);
+    
+    if (index % 2 === 0) {
+      sheet.getRange(row, 1, 1, rowData.length).setBackground('#f8f9fa');
+    }
+    sheet.getRange(row, 1, 1, rowData.length).setBorder(true, true, true, true, false, false);
+  });
+  
+  // Set column widths
+  const columnWidths = [200, 120, 120, 120];
+  columnWidths.forEach((width, index) => {
+    sheet.setColumnWidth(index + 1, width);
+  });
+  
+  console.log('✅ Dashboard sheet created successfully');
+}
 
-        .submit-btn:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3);
-        }
+/**
+ * STEP 2: Web App Handler - Handle form submissions
+ */
+function doPost(e) {
+  try {
+    const data = JSON.parse(e.postData.contents);
+    console.log('📨 Received request:', data.action);
+    
+    switch (data.action) {
+      case 'addTimeEntry':
+        return addTimeEntry(data.data);
+      case 'getEmployeeRecords':
+        return getEmployeeRecords(data.employee, data.store);
+      case 'getStoreData':
+        return getStoreData(data.store);
+      case 'generateReport':
+        return generateReport(data.store, data.startDate, data.endDate);
+      default:
+        return createResponse(false, 'Unknown action: ' + data.action);
+    }
+  } catch (error) {
+    console.error('❌ Error in doPost:', error);
+    return createResponse(false, 'Server error: ' + error.toString());
+  }
+}
 
-        .submit-btn:disabled {
-            background: #a0aec0;
-            cursor: not-allowed;
-            transform: none;
-            box-shadow: none;
-        }
+/**
+ * Adds a time entry to the spreadsheet
+ */
+function addTimeEntry(timeEntry) {
+  try {
+    console.log('⏰ Adding time entry for:', timeEntry.employee);
+    
+    const spreadsheet = getSpreadsheet();
+    if (!spreadsheet) {
+      return createResponse(false, 'Spreadsheet not found. Please run initialization first.');
+    }
+    
+    // Generate entry ID if not provided
+    if (!timeEntry.id) {
+      timeEntry.id = 'TE_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+    }
+    
+    // Add timestamp if not provided
+    if (!timeEntry.submittedAt) {
+      timeEntry.submittedAt = new Date().toISOString();
+    }
+    
+    // Add to Master Summary
+    addToMasterSummary(spreadsheet, timeEntry);
+    
+    // Add to Store Sheet
+    addToStoreSheet(spreadsheet, timeEntry);
+    
+    // Update employee summaries
+    updateEmployeeSummary(spreadsheet, timeEntry);
+    
+    console.log('✅ Time entry added successfully for:', timeEntry.employee);
+    
+    return createResponse(true, 'Time entry added successfully', {
+      entryId: timeEntry.id,
+      employee: timeEntry.employee,
+      store: timeEntry.store,
+      hours: timeEntry.hoursWorked,
+      date: timeEntry.date
+    });
+    
+  } catch (error) {
+    console.error('❌ Error adding time entry:', error);
+    return createResponse(false, 'Error adding time entry: ' + error.toString());
+  }
+}
 
-        .status {
-            margin-top: 20px;
-            padding: 15px;
-            border-radius: 8px;
-            text-align: center;
-            font-weight: 600;
-            display: none;
-        }
+/**
+ * Adds entry to Master Summary sheet
+ */
+function addToMasterSummary(spreadsheet, timeEntry) {
+  const sheet = spreadsheet.getSheetByName('📊 Master Summary');
+  if (!sheet) {
+    console.error('Master Summary sheet not found');
+    return;
+  }
+  
+  const lastRow = sheet.getLastRow();
+  const newRow = lastRow + 1;
+  
+  const rowData = [
+    timeEntry.id,
+    timeEntry.date,
+    timeEntry.store,
+    timeEntry.employee,
+    timeEntry.startTime,
+    timeEntry.endTime,
+    parseFloat(timeEntry.hoursWorked),
+    timeEntry.submittedBy || 'System',
+    new Date(timeEntry.submittedAt),
+    'Active'
+  ];
+  
+  sheet.getRange(newRow, 1, 1, rowData.length).setValues([rowData]);
+  
+  // Format the new row
+  const range = sheet.getRange(newRow, 1, 1, rowData.length);
+  range.setBorder(true, true, true, true, false, false);
+  
+  // Alternate row coloring
+  if (newRow % 2 === 0) {
+    range.setBackground('#f8f9fa');
+  }
+  
+  console.log('📊 Added to Master Summary at row:', newRow);
+}
 
-        .status.success {
-            background: #c6f6d5;
-            color: #22543d;
-            border: 1px solid #9ae6b4;
-        }
+/**
+ * Adds entry to Store Sheet
+ */
+function addToStoreSheet(spreadsheet, timeEntry) {
+  const sheetName = `🏪 ${timeEntry.store}`;
+  const sheet = spreadsheet.getSheetByName(sheetName);
+  if (!sheet) {
+    console.error('Store sheet not found:', sheetName);
+    return;
+  }
+  
+  // Find the time entries section (starts around row 16)
+  const dataStartRow = 17; // After the headers in time entries section
+  const lastRow = Math.max(sheet.getLastRow(), dataStartRow - 1);
+  const newRow = lastRow + 1;
+  
+  const rowData = [
+    timeEntry.date,
+    timeEntry.employee,
+    timeEntry.startTime,
+    timeEntry.endTime,
+    parseFloat(timeEntry.hoursWorked),
+    timeEntry.submittedBy || 'System',
+    new Date(timeEntry.submittedAt)
+  ];
+  
+  sheet.getRange(newRow, 1, 1, rowData.length).setValues([rowData]);
+  
+  // Format the new row
+  const range = sheet.getRange(newRow, 1, 1, rowData.length);
+  range.setBorder(true, true, true, true, false, false);
+  
+  // Alternate row coloring
+  if ((newRow - dataStartRow) % 2 === 0) {
+    range.setBackground('#f8f9fa');
+  }
+  
+  console.log('🏪 Added to store sheet at row:', newRow);
+}
 
-        .status.error {
-            background: #fed7d7;
-            color: #742a2a;
-            border: 1px solid #fc8181;
-        }
+/**
+ * Updates employee summary in store sheet
+ */
+function updateEmployeeSummary(spreadsheet, timeEntry) {
+  const sheetName = `🏪 ${timeEntry.store}`;
+  const sheet = spreadsheet.getSheetByName(sheetName);
+  if (!sheet) return;
+  
+  const employees = STORES[timeEntry.store]?.employees || [];
+  const employeeIndex = employees.indexOf(timeEntry.employee);
+  
+  if (employeeIndex === -1) {
+    console.log('⚠️ Employee not found in store config:', timeEntry.employee);
+    return;
+  }
+  
+  const summaryRow = 5 + employeeIndex; // Employee summary starts at row 5
+  
+  try {
+    // Update last entry date
+    sheet.getRange(summaryRow, 5).setValue(new Date());
+    
+    // Update total hours (simplified - adds to existing total)
+    const currentTotal = sheet.getRange(summaryRow, 4).getValue() || 0;
+    const newTotal = parseFloat(currentTotal) + parseFloat(timeEntry.hoursWorked);
+    sheet.getRange(summaryRow, 4).setValue(newTotal);
+    
+    // Update this month hours (simplified)
+    const currentMonth = sheet.getRange(summaryRow, 3).getValue() || 0;
+    const newMonth = parseFloat(currentMonth) + parseFloat(timeEntry.hoursWorked);
+    sheet.getRange(summaryRow, 3).setValue(newMonth);
+    
+    console.log('📊 Updated summary for employee:', timeEntry.employee);
+  } catch (error) {
+    console.error('Error updating employee summary:', error);
+  }
+}
 
-        .employee-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-            gap: 10px;
-            margin-top: 10px;
-        }
+/**
+ * UTILITY FUNCTIONS
+ */
 
-        .employee-option {
-            padding: 10px 15px;
-            background: #f8fafc;
-            border: 2px solid #e2e8f0;
-            border-radius: 8px;
-            cursor: pointer;
-            text-align: center;
-            transition: all 0.3s ease;
-            font-size: 0.9rem;
-            font-weight: 500;
-        }
+function getSpreadsheet() {
+  const spreadsheetId = getStoredSpreadsheetId();
+  if (!spreadsheetId) {
+    console.error('No spreadsheet ID found in properties');
+    return null;
+  }
+  
+  try {
+    return SpreadsheetApp.openById(spreadsheetId);
+  } catch (error) {
+    console.error('Error opening spreadsheet:', error);
+    return null;
+  }
+}
 
-        .employee-option:hover {
-            border-color: #667eea;
-            background: #edf2f7;
-        }
+function getStoredSpreadsheetId() {
+  return PropertiesService.getScriptProperties().getProperty(SCRIPT_PROPERTY_KEY);
+}
 
-        .employee-option.selected {
-            background: #667eea;
-            color: white;
-            border-color: #667eea;
-        }
+function storeSpreadsheetId(spreadsheetId) {
+  PropertiesService.getScriptProperties().setProperty(SCRIPT_PROPERTY_KEY, spreadsheetId);
+  console.log('💾 Stored spreadsheet ID:', spreadsheetId);
+}
 
-        @media (max-width: 640px) {
-            .container {
-                padding: 30px 20px;
-                margin: 10px;
-            }
+function createResponse(success, message, data = null) {
+  const response = {
+    success: success,
+    message: message,
+    data: data,
+    timestamp: new Date().toISOString()
+  };
+  
+  return ContentService.createTextOutput(JSON.stringify(response))
+    .setMimeType(ContentService.MimeType.JSON);
+}
 
-            .time-inputs {
-                grid-template-columns: 1fr;
-            }
+/**
+ * STEP 3: Get current system info
+ */
+function getSpreadsheetInfo() {
+  const spreadsheetId = getStoredSpreadsheetId();
+  
+  if (!spreadsheetId) {
+    console.log('❌ No spreadsheet found');
+    return {
+      exists: false,
+      message: 'No spreadsheet found. Run initializeBackWerkTimeTracker() first.'
+    };
+  }
+  
+  try {
+    const spreadsheet = SpreadsheetApp.openById(spreadsheetId);
+    const sheets = spreadsheet.getSheets().map(sheet => ({
+      name: sheet.getName(),
+      rows: sheet.getLastRow(),
+      columns: sheet.getLastColumn()
+    }));
+    
+    console.log('✅ Spreadsheet info retrieved');
+    console.log('📊 Sheets:', sheets.map(s => s.name));
+    
+    return {
+      exists: true,
+      spreadsheetId: spreadsheetId,
+      spreadsheetName: spreadsheet.getName(),
+      spreadsheetUrl: spreadsheet.getUrl(),
+      sheets: sheets,
+      lastModified: spreadsheet.getLastUpdated(),
+      totalSheets: sheets.length
+    };
+    
+  } catch (error) {
+    console.error('❌ Error getting spreadsheet info:', error);
+    return {
+      exists: false,
+      error: error.toString(),
+      message: 'Stored spreadsheet ID is invalid. Run initializeBackWerkTimeTracker() to create a new one.'
+    };
+  }
+}
 
-            .employee-grid {
-                grid-template-columns: 1fr 1fr;
-            }
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>🕐 BackWerk Time Entry</h1>
-            <p>Log your work hours</p>
-        </div>
+/**
+ * STEP 4: Test function to add sample data
+ */
+function addSampleData() {
+  const sampleEntries = [
+    {
+      date: '2024-01-15',
+      store: 'BackWerk Frankenthal',
+      employee: 'Waqas',
+      startTime: '09:00',
+      endTime: '17:00',
+      hoursWorked: 8,
+      submittedBy: 'Manager'
+    },
+    {
+      date: '2024-01-15',
+      store: 'BackWerk Offenburg',
+      employee: 'Shazia',
+      startTime: '10:00',
+      endTime: '18:00',
+      hoursWorked: 8,
+      submittedBy: 'Manager'
+    },
+    {
+      date: '2024-01-15',
+      store: 'BackWerk Karlsruhe',
+      employee: 'Furqan',
+      startTime: '08:00',
+      endTime: '16:00',
+      hoursWorked: 8,
+      submittedBy: 'Manager'
+    }
+  ];
+  
+  console.log('📝 Adding sample data...');
+  
+  sampleEntries.forEach((entry, index) => {
+    const result = addTimeEntry(entry);
+    console.log(`Sample ${index + 1}:`, result.success ? '✅' : '❌', result.message);
+  });
+  
+  console.log('✅ Sample data added');
+  return 'Sample data added successfully!';
+}
 
-        <form id="timeEntryForm">
-            <div class="form-group">
-                <label for="store">🏪 Store</label>
-                <select id="store" name="store" required>
-                    <option value="">Select your store</option>
-                    <option value="BackWerk Frankenthal">BackWerk Frankenthal</option>
-                    <option value="BackWerk Offenburg">BackWerk Offenburg</option>
-                    <option value="BackWerk Karlsruhe">BackWerk Karlsruhe</option>
-                    <option value="Back-Factory Karlsruhe">Back-Factory Karlsruhe</option>
-                </select>
-            </div>
-
-            <div class="form-group">
-                <label>👤 Employee</label>
-                <div id="employeeGrid" class="employee-grid">
-                    <!-- Employees will be loaded here based on store selection -->
-                </div>
-                <input type="hidden" id="employee" name="employee" required>
-            </div>
-
-            <div class="form-group">
-                <label for="date">📅 Date</label>
-                <input type="date" id="date" name="date" required>
-            </div>
-
-            <div class="form-group">
-                <label>⏰ Time</label>
-                <div class="time-inputs">
-                    <div>
-                        <input type="time" id="startTime" name="startTime" placeholder="Start Time" required>
-                    </div>
-                    <div>
-                        <input type="time" id="endTime" name="endTime" placeholder="End Time" required>
-                    </div>
-                </div>
-            </div>
-
-            <div class="form-group">
-                <label for="submittedBy">📝 Submitted By (Optional)</label>
-                <input type="text" id="submittedBy" name="submittedBy" placeholder="Your name or Manager name">
-            </div>
-
-            <button type="submit" class="submit-btn">
-                Submit Time Entry
-            </button>
-        </form>
-
-        <div id="status" class="status"></div>
-    </div>
-
-    <script>
-        // Store configurations matching your Google Apps Script
-        const STORES = {
-            'BackWerk Frankenthal': ['Waqas', 'Yan', 'Gizem', 'Irfan', 'Najat', 'Atta', 'Ayesha', 'Melek'],
-            'BackWerk Offenburg': ['Shazia', 'Kamran', 'Hussain', 'Mohan', 'Nilab', 'Nandini'],
-            'BackWerk Karlsruhe': ['Furqan', 'Hamza', 'Dilpreet', 'Yaseen'],
-            'Back-Factory Karlsruhe': ['Nabeel', 'Lubna', 'Nosheen', 'Rabia']
-        };
-
-        // ⚠️ IMPORTANT: Replace this with your actual Google Apps Script Web App URL
-        const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbw8SHqhj-H7ooxZT5TXGzZfZPWvcgcCMkskdN2rQDLmRGI_qmqpw5YQx6PIx_rCt6cJxA/exec';
-
-        // Set today's date as default
-        document.getElementById('date').valueAsDate = new Date();
-
-        // Handle store selection
-        document.getElementById('store').addEventListener('change', function() {
-            const selectedStore = this.value;
-            const employeeGrid = document.getElementById('employeeGrid');
-            const employeeInput = document.getElementById('employee');
-            
-            // Clear previous selection
-            employeeGrid.innerHTML = '';
-            employeeInput.value = '';
-            
-            if (selectedStore && STORES[selectedStore]) {
-                const employees = STORES[selectedStore];
-                employees.forEach(employee => {
-                    const option = document.createElement('div');
-                    option.className = 'employee-option';
-                    option.textContent = employee;
-                    option.addEventListener('click', function() {
-                        // Remove previous selection
-                        document.querySelectorAll('.employee-option').forEach(opt => {
-                            opt.classList.remove('selected');
-                        });
-                        
-                        // Select this option
-                        this.classList.add('selected');
-                        employeeInput.value = employee;
-                    });
-                    employeeGrid.appendChild(option);
-                });
-            }
-        });
-
-        // Calculate hours worked
-        function calculateHours(startTime, endTime) {
-            if (!startTime || !endTime) return 0;
-            
-            const start = new Date(`2000-01-01T${startTime}:00`);
-            const end = new Date(`2000-01-01T${endTime}:00`);
-            
-            if (end <= start) {
-                // Handle next day case
-                end.setDate(end.getDate() + 1);
-            }
-            
-            const diffMs = end - start;
-            return (diffMs / (1000 * 60 * 60)).toFixed(2);
-        }
-
-        // Handle form submission
-        document.getElementById('timeEntryForm').addEventListener('submit', async function(e) {
-            e.preventDefault();
-            
-            if (WEB_APP_URL === 'YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL_HERE') {
-                showStatus('error', '⚠️ Please update the WEB_APP_URL in the JavaScript code with your Google Apps Script Web App URL');
-                return;
-            }
-            
-            const formData = new FormData(this);
-            const data = {};
-            
-            for (let [key, value] of formData.entries()) {
-                data[key] = value;
-            }
-            
-            // Add employee from hidden field
-            data.employee = document.getElementById('employee').value;
-            
-            // Validate employee selection
-            if (!data.employee) {
-                showStatus('error', 'Please select an employee');
-                return;
-            }
-            
-            // Calculate hours worked
-            data.hoursWorked = calculateHours(data.startTime, data.endTime);
-            
-            if (data.hoursWorked <= 0) {
-                showStatus('error', 'End time must be after start time');
-                return;
-            }
-            
-            // Prepare submission
-            const submitBtn = document.querySelector('.submit-btn');
-            submitBtn.disabled = true;
-            submitBtn.textContent = 'Submitting...';
-            
-            try {
-                const response = await fetch(WEB_APP_URL, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'text/plain',
-                    },
-                    body: JSON.stringify({
-                        action: 'addTimeEntry',
-                        data: data
-                    })
-                });
-                
-                const result = await response.json();
-                
-                if (result.success) {
-                    showStatus('success', `✅ Time entry submitted successfully! Hours worked: ${data.hoursWorked}`);
-                    this.reset();
-                    document.getElementById('date').valueAsDate = new Date();
-                    document.getElementById('employeeGrid').innerHTML = '';
-                    document.querySelectorAll('.employee-option').forEach(opt => {
-                        opt.classList.remove('selected');
-                    });
-                } else {
-                    showStatus('error', `❌ Error: ${result.message}`);
-                }
-            } catch (error) {
-                showStatus('error', `❌ Network error: ${error.message}`);
-            } finally {
-                submitBtn.disabled = false;
-                submitBtn.textContent = 'Submit Time Entry';
-            }
-        });
-
-        function showStatus(type, message) {
-            const status = document.getElementById('status');
-            status.className = `status ${type}`;
-            status.textContent = message;
-            status.style.display = 'block';
-            
-            setTimeout(() => {
-                status.style.display = 'none';
-            }, 5000);
-        }
-    </script>
-</body>
-</html>
+/**
+ * STEP 5: Reset system if needed
+ */
+function resetSystem() {
+  const currentId = getStoredSpreadsheetId();
+  
+  if (currentId) {
+    try {
+      const currentSpreadsheet = SpreadsheetApp.openById(currentId);
+      console.log('🗑️ Deleting old spreadsheet:', currentSpreadsheet.getName());
+      DriveApp.getFileById(currentId).setTrashed(true);
+    } catch (error) {
+      console.log('⚠️ Could not delete old spreadsheet:', error.toString());
+    }
+  }
+  
+  // Clear stored ID
+  PropertiesService.getScriptProperties().deleteProperty(SCRIPT_PROPERTY_KEY);
+  console.log('🧹 Cleared stored properties');
+  
+  // Initialize new system
+  return initializeBackWerkTimeTracker();
+}
