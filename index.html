@@ -754,7 +754,7 @@
 
     <script>
         // Configuration
-        const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby55CK8zhqY-7kmAi5fb8aaHZjPwaKOap_dZEg7f5Y3t-2SNTIcvccHWZRBZQtUEUNH/exec';
+        const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbw8SHqhj-H7ooxZT5TXGzZfZPWvcgcCMkskdN2rQDLmRGI_qmqpw5YQx6PIx_rCt6cJxA/exec';
         const GOOGLE_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1IqsqN8FwBb-uejbyUtkkCAXlJaikrQUWj_LgbVoseRM/edit?gid=474890857#gid=474890857';
 
         // Store and Employee Data
@@ -991,6 +991,17 @@
             document.getElementById('adminControls').style.display = 'none';
             document.getElementById('managerDashboard').style.display = 'none';
             document.getElementById('adminMode').checked = false;
+            
+            // Remove employee info display if it exists
+            const existingInfo = document.querySelector('.employee-info-display');
+            if (existingInfo) {
+                existingInfo.remove();
+            }
+            
+            // Show dropdowns again
+            document.querySelector('.store-select').style.display = 'block';
+            document.querySelector('.employee-select').style.display = 'block';
+            
             clearStatusMessage();
             clearRecordsDisplay();
         }
