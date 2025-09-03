@@ -857,377 +857,383 @@
         document.addEventListener('DOMContentLoaded', function() {
             updateCurrentTime();
             setInterval(updateCurrentTime, 1000);
-            setTodayDate();
             
-            // Check for saved session
-            const savedUser = localStorage.getItem('currentUser');
-            if (savedUser) {
-                currentUser = JSON.parse(savedUser);
-                showApp();
-            }
-
-            // Add enter key listeners for login
-            document.getElementById('username').addEventListener('keypress', function(e) {
-                if (e.key === 'Enter') attemptLogin();
-            });
-            document.getElementById('password').addEventListener('keypress', function(e) {
-                if (e.key === 'Enter') attemptLogin();
-            });
+            // Set today's date as default
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('dateInput').value = today;
+            
+            // Load saved records from localStorage
+            loadLocalRecords();
+            
+            // Check for saved login
+            checkSavedLogin();
         });
 
-        // Authentication Functions
-        function attemptLogin() {
-            const username = document.getElementById('username').value.toLowerCase().trim();
-            const password = document.getElementById('password').value;
-            const loginBtn = document.getElementById('loginBtn');
-            const statusMessage = document.getElementById('loginStatusMessage');
-
-            if (!username || !password) {
-                showMessage(statusMessage, 'Please enter both username and password', 'error');
-                return;
-            }
-
-            loginBtn.disabled = true;
-            loginBtn.textContent = 'Logging in...';
-
-            // Simulate loading delay
-            setTimeout(() => {
-                if (USERS[username] && USERS[username].password === password) {
-                    currentUser = { 
-                        username: username, 
-                        ...USERS[username] 
-                    };
-                    localStorage.setItem('currentUser', JSON.stringify(currentUser));
-                    showApp();
-                } else {
-                    showMessage(statusMessage, 'Invalid username or password', 'error');
-                }
-                
-                loginBtn.disabled = false;
-                loginBtn.textContent = 'Login';
-            }, 800);
-        }
-
-        function showApp() {
-            document.getElementById('loginContainer').style.display = 'none';
-            document.getElementById('appContainer').style.display = 'block';
-            document.getElementById('logoutBtn').style.display = 'block';
-            
-            initializeApp();
-        }
-
-        function logout() {
-            localStorage.removeItem('currentUser');
-            currentUser = null;
-            selectedStore = null;
-            
-            // Reset form
-            document.getElementById('username').value = '';
-            document.getElementById('password').value = '';
-            document.getElementById('storeSelect').value = '';
-            document.getElementById('employee').innerHTML = '<option value="">-- Select Store First --</option>';
-            
-            // Hide app, show login
-            document.getElementById('appContainer').style.display = 'none';
-            document.getElementById('loginContainer').style.display = 'block';
-            document.getElementById('logoutBtn').style.display = 'none';
-            
-            // Clear status messages
-            clearMessage(document.getElementById('loginStatusMessage'));
-            clearMessage(document.getElementById('statusMessage'));
-        }
-
-        function initializeApp() {
-            populateStoreSelect();
-            loadTimeRecords();
-            
-            // Show manager tools if applicable
-            if (currentUser.role === 'Owner' || currentUser.role === 'Manager') {
-                document.getElementById('managerDashboard').style.display = 'block';
-            }
-        }
-
-        // Store and Employee Management
-        function populateStoreSelect() {
-            const storeSelect = document.getElementById('storeSelect');
-            storeSelect.innerHTML = '<option value="">-- Choose Store --</option>';
-            
-            // Filter stores based on user permissions
-            currentUser.stores.forEach(storeName => {
-                const option = document.createElement('option');
-                option.value = storeName;
-                option.textContent = storeName;
-                storeSelect.appendChild(option);
-            });
-
-            // Auto-select store for employees
-            if (currentUser.role === 'Employee' && currentUser.stores.length === 1) {
-                storeSelect.value = currentUser.stores[0];
-                onStoreChange();
-            }
-        }
-
-        function onStoreChange() {
-            const storeSelect = document.getElementById('storeSelect');
-            selectedStore = storeSelect.value;
-            
-            updateStoreIndicator();
-            populateEmployeeSelect();
-            validateForm();
-            
-            // Load records for this store
-            if (selectedStore) {
-                loadTimeRecords();
-            }
-        }
-
-        function updateStoreIndicator() {
-            const indicator = document.getElementById('storeIndicator');
-            if (selectedStore) {
-                indicator.textContent = selectedStore;
-                indicator.style.background = STORES[selectedStore]?.color || '#ff6b6b';
-            } else {
-                indicator.textContent = 'Select Store';
-                indicator.style.background = 'rgba(255,255,255,0.2)';
-            }
-        }
-
-        function populateEmployeeSelect() {
-            const employeeSelect = document.getElementById('employee');
-            const adminControls = document.getElementById('adminControls');
-            
-            employeeSelect.innerHTML = '<option value="">-- Select Employee --</option>';
-            
-            if (!selectedStore) {
-                employeeSelect.innerHTML = '<option value="">-- Select Store First --</option>';
-                adminControls.style.display = 'none';
-                return;
-            }
-
-            const storeEmployees = STORES[selectedStore]?.employees || [];
-            
-            // Show admin controls for managers/owners
-            const isManager = currentUser.role === 'Owner' || 
-                            (currentUser.role === 'Manager' && currentUser.managerOf?.includes(selectedStore));
-            
-            if (isManager) {
-                adminControls.style.display = 'block';
-                
-                // In admin mode, show all employees
-                if (document.getElementById('adminMode').checked) {
-                    storeEmployees.forEach(emp => {
-                        const option = document.createElement('option');
-                        option.value = emp;
-                        option.textContent = emp;
-                        employeeSelect.appendChild(option);
-                    });
-                } else {
-                    // Show only current user
-                    const option = document.createElement('option');
-                    option.value = currentUser.name;
-                    option.textContent = currentUser.name;
-                    employeeSelect.appendChild(option);
-                    employeeSelect.value = currentUser.name;
-                }
-            } else {
-                // Regular employees see only themselves
-                adminControls.style.display = 'none';
-                const option = document.createElement('option');
-                option.value = currentUser.name;
-                option.textContent = currentUser.name;
-                employeeSelect.appendChild(option);
-                employeeSelect.value = currentUser.name;
-            }
-            
-            onEmployeeChange();
-        }
-
-        function toggleAdminMode() {
-            populateEmployeeSelect();
-        }
-
-        function onEmployeeChange() {
-            validateForm();
-            loadTimeRecords();
-        }
-
-        // Time Management Functions
+        // Time update function
         function updateCurrentTime() {
             const now = new Date();
-            const timeStr = now.toLocaleTimeString('en-US', { 
-                hour12: false,
+            const timeString = now.toLocaleTimeString('de-DE', { 
                 hour: '2-digit', 
                 minute: '2-digit', 
                 second: '2-digit' 
             });
-            const dateStr = now.toLocaleDateString('en-US', { 
+            const dateString = now.toLocaleDateString('de-DE', { 
                 weekday: 'long', 
                 year: 'numeric', 
                 month: 'long', 
                 day: 'numeric' 
             });
             
-            document.getElementById('currentTime').textContent = timeStr;
-            document.getElementById('currentDate').textContent = dateStr;
+            document.getElementById('currentTime').textContent = timeString;
+            document.getElementById('currentDate').textContent = dateString;
         }
 
-        function setTodayDate() {
-            const today = new Date().toISOString().split('T')[0];
-            document.getElementById('dateInput').value = today;
+        // Authentication functions
+        function attemptLogin() {
+            const username = document.getElementById('username').value.toLowerCase().trim();
+            const password = document.getElementById('password').value;
+            const loginBtn = document.getElementById('loginBtn');
+            const statusMsg = document.getElementById('loginStatusMessage');
+            
+            if (!username || !password) {
+                showStatusMessage('loginStatusMessage', 'Please enter both username and password', 'error');
+                return;
+            }
+            
+            loginBtn.disabled = true;
+            loginBtn.textContent = 'Logging in...';
+            
+            // Simulate loading delay
+            setTimeout(() => {
+                if (USERS[username] && USERS[username].password === password) {
+                    currentUser = USERS[username];
+                    currentUser.username = username;
+                    
+                    // Save login to localStorage
+                    localStorage.setItem('currentUser', JSON.stringify(currentUser));
+                    
+                    showLogin(false);
+                    setupUserInterface();
+                    showStatusMessage('loginStatusMessage', `Welcome ${currentUser.name}!`, 'success');
+                } else {
+                    showStatusMessage('loginStatusMessage', 'Invalid username or password', 'error');
+                }
+                
+                loginBtn.disabled = false;
+                loginBtn.textContent = 'Login';
+            }, 1000);
         }
 
-        function setCurrentTime(inputId) {
-            const now = new Date();
-            const timeStr = now.toTimeString().slice(0, 5);
-            document.getElementById(inputId).value = timeStr;
+        function checkSavedLogin() {
+            const saved = localStorage.getItem('currentUser');
+            if (saved) {
+                currentUser = JSON.parse(saved);
+                showLogin(false);
+                setupUserInterface();
+            }
+        }
+
+        function logout() {
+            currentUser = null;
+            selectedStore = null;
+            localStorage.removeItem('currentUser');
+            showLogin(true);
+            resetInterface();
+            document.getElementById('username').value = '';
+            document.getElementById('password').value = '';
+        }
+
+        function showLogin(show) {
+            document.getElementById('loginContainer').style.display = show ? 'block' : 'none';
+            document.getElementById('appContainer').style.display = show ? 'none' : 'block';
+            document.getElementById('logoutBtn').style.display = show ? 'none' : 'block';
+        }
+
+        function setupUserInterface() {
+            const storeSelect = document.getElementById('storeSelect');
+            
+            // Clear existing options except the first one
+            while (storeSelect.children.length > 1) {
+                storeSelect.removeChild(storeSelect.lastChild);
+            }
+            
+            // Add stores based on user access
+            currentUser.stores.forEach(store => {
+                const option = document.createElement('option');
+                option.value = store;
+                option.textContent = store;
+                storeSelect.appendChild(option);
+            });
+            
+            // Show admin controls for managers and owner
+            if (currentUser.role === 'Manager' || currentUser.role === 'Owner') {
+                document.getElementById('adminControls').style.display = 'block';
+                document.getElementById('managerDashboard').style.display = 'block';
+            }
+            
+            // Auto-select store for employees
+            if (currentUser.role === 'Employee' && currentUser.stores.length === 1) {
+                storeSelect.value = currentUser.stores[0];
+                onStoreChange();
+                
+                // Auto-select employee for their own account
+                setTimeout(() => {
+                    const employeeSelect = document.getElementById('employee');
+                    employeeSelect.value = currentUser.name;
+                    onEmployeeChange();
+                }, 100);
+            }
+        }
+
+        function resetInterface() {
+            document.getElementById('storeSelect').value = '';
+            document.getElementById('employee').innerHTML = '<option value="">-- Select Store First --</option>';
+            document.getElementById('adminControls').style.display = 'none';
+            document.getElementById('managerDashboard').style.display = 'none';
+            document.getElementById('adminMode').checked = false;
+            clearStatusMessage();
+            clearRecordsDisplay();
+        }
+
+        // Store and Employee Management
+        function onStoreChange() {
+            const store = document.getElementById('storeSelect').value;
+            const employeeSelect = document.getElementById('employee');
+            const storeIndicator = document.getElementById('storeIndicator');
+            
+            selectedStore = store;
+            
+            // Update store indicator
+            if (store) {
+                storeIndicator.textContent = store;
+                storeIndicator.style.background = STORES[store].color;
+            } else {
+                storeIndicator.textContent = 'Select Store';
+                storeIndicator.style.background = 'rgba(255,255,255,0.2)';
+            }
+            
+            // Clear and populate employees
+            employeeSelect.innerHTML = '<option value="">-- Select Employee --</option>';
+            
+            if (store && STORES[store]) {
+                STORES[store].employees.forEach(emp => {
+                    const option = document.createElement('option');
+                    option.value = emp;
+                    option.textContent = emp;
+                    employeeSelect.appendChild(option);
+                });
+            }
+            
+            validateForm();
+            clearRecordsDisplay();
+        }
+
+        function onEmployeeChange() {
+            validateForm();
+            loadRecordsForEmployee();
+        }
+
+        function toggleAdminMode() {
+            const adminMode = document.getElementById('adminMode').checked;
+            const employeeSelect = document.getElementById('employee');
+            
+            if (adminMode) {
+                // Allow selection of any employee in the store
+                employeeSelect.disabled = false;
+            } else {
+                // Restrict to user's own name for managers
+                if (currentUser.role === 'Manager') {
+                    employeeSelect.value = currentUser.name;
+                    employeeSelect.disabled = true;
+                }
+            }
+            
             validateForm();
         }
 
+        // Form validation
         function validateForm() {
             const store = document.getElementById('storeSelect').value;
             const employee = document.getElementById('employee').value;
             const date = document.getElementById('dateInput').value;
             const startTime = document.getElementById('startTime').value;
             const endTime = document.getElementById('endTime').value;
+            const submitBtn = document.getElementById('submitBtn');
             
             const isValid = store && employee && date && startTime && endTime;
-            document.getElementById('submitBtn').disabled = !isValid;
-            
-            return isValid;
+            submitBtn.disabled = !isValid;
         }
 
-        // Time Entry Submission
+        // Time setting functions
+        function setCurrentTime(inputId) {
+            const now = new Date();
+            const timeString = now.toTimeString().slice(0, 5);
+            document.getElementById(inputId).value = timeString;
+            validateForm();
+        }
+
+        // Main submission function
         async function submitTimeEntry() {
-            if (!validateForm()) {
-                showMessage(document.getElementById('statusMessage'), 'Please fill all fields', 'error');
-                return;
-            }
-
             const submitBtn = document.getElementById('submitBtn');
-            const statusMessage = document.getElementById('statusMessage');
+            const originalText = submitBtn.textContent;
             
-            const formData = {
-                store: document.getElementById('storeSelect').value,
-                employee: document.getElementById('employee').value,
-                date: document.getElementById('dateInput').value,
-                startTime: document.getElementById('startTime').value,
-                endTime: document.getElementById('endTime').value,
-                submittedBy: currentUser.name,
-                submittedAt: new Date().toISOString()
-            };
-
-            // Calculate hours
-            const start = new Date(`${formData.date}T${formData.startTime}`);
-            const end = new Date(`${formData.date}T${formData.endTime}`);
-            const hours = (end - start) / (1000 * 60 * 60);
-
-            if (hours <= 0) {
-                showMessage(statusMessage, 'End time must be after start time', 'error');
-                return;
-            }
-
-            if (hours > 12) {
-                showMessage(statusMessage, 'Work shift cannot exceed 12 hours', 'warning');
-                return;
-            }
-
-            formData.hoursWorked = hours.toFixed(2);
-
+            // Disable button and show loading
             submitBtn.disabled = true;
             submitBtn.textContent = 'Submitting...';
-
+            
             try {
+                const formData = {
+                    store: document.getElementById('storeSelect').value,
+                    employee: document.getElementById('employee').value,
+                    date: document.getElementById('dateInput').value,
+                    startTime: document.getElementById('startTime').value,
+                    endTime: document.getElementById('endTime').value,
+                    submittedBy: currentUser.name,
+                    submittedAt: new Date().toISOString()
+                };
+                
+                // Validate times
+                if (!validateTimeEntry(formData)) {
+                    return;
+                }
+                
+                // Calculate hours
+                const hours = calculateHours(formData.startTime, formData.endTime);
+                formData.totalHours = hours;
+                
                 // Save locally first
                 saveLocalRecord(formData);
                 
                 // Try to submit to Google Sheets
-                const response = await fetch(GOOGLE_SCRIPT_URL, {
-                    method: 'POST',
-                    mode: 'no-cors',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(formData)
-                });
-
-                showMessage(statusMessage, `Time entry submitted successfully! Worked: ${formData.hoursWorked} hours`, 'success');
+                await submitToGoogleSheets(formData);
+                
+                showStatusMessage('statusMessage', 
+                    `Successfully submitted ${hours.toFixed(2)} hours for ${formData.employee}`, 
+                    'success');
                 
                 // Clear form
-                document.getElementById('startTime').value = '';
-                document.getElementById('endTime').value = '';
+                clearForm();
                 
                 // Refresh records
-                loadTimeRecords();
-
+                loadRecordsForEmployee();
+                
             } catch (error) {
                 console.error('Submission error:', error);
-                showMessage(statusMessage, 'Saved locally. Will sync when online.', 'info');
+                showStatusMessage('statusMessage', 
+                    'Saved locally. Will sync when online.', 
+                    'warning');
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = originalText;
             }
-
-            submitBtn.disabled = false;
-            submitBtn.textContent = 'Submit Work Hours';
         }
 
-        // Local Storage Management
+        function validateTimeEntry(data) {
+            const startTime = new Date(`2000-01-01T${data.startTime}`);
+            const endTime = new Date(`2000-01-01T${data.endTime}`);
+            
+            if (endTime <= startTime) {
+                showStatusMessage('statusMessage', 'End time must be after start time', 'error');
+                return false;
+            }
+            
+            const hours = (endTime - startTime) / (1000 * 60 * 60);
+            if (hours > 24) {
+                showStatusMessage('statusMessage', 'Work hours cannot exceed 24 hours', 'error');
+                return false;
+            }
+            
+            return true;
+        }
+
+        function calculateHours(startTime, endTime) {
+            const start = new Date(`2000-01-01T${startTime}`);
+            const end = new Date(`2000-01-01T${endTime}`);
+            return (end - start) / (1000 * 60 * 60);
+        }
+
+        async function submitToGoogleSheets(data) {
+            const response = await fetch(GOOGLE_SCRIPT_URL, {
+                method: 'POST',
+                mode: 'no-cors',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(data)
+            });
+            
+            // Note: due to no-cors mode, we can't check response status
+            // We'll assume success if no error is thrown
+            return true;
+        }
+
+        // Local storage functions
         function saveLocalRecord(record) {
             const records = JSON.parse(localStorage.getItem('timeRecords') || '[]');
-            records.unshift(record);
-            
-            // Keep only last 100 records
-            if (records.length > 100) {
-                records.splice(100);
-            }
-            
+            record.id = Date.now().toString();
+            records.push(record);
             localStorage.setItem('timeRecords', JSON.stringify(records));
+            timeRecords = records;
         }
 
-        function loadTimeRecords() {
-            const records = JSON.parse(localStorage.getItem('timeRecords') || '[]');
-            const selectedEmployee = document.getElementById('employee').value;
-            const selectedStoreValue = document.getElementById('storeSelect').value;
+        function loadLocalRecords() {
+            timeRecords = JSON.parse(localStorage.getItem('timeRecords') || '[]');
+        }
+
+        function clearLocalRecords() {
+            if (confirm('Are you sure you want to clear all local records?')) {
+                localStorage.removeItem('timeRecords');
+                timeRecords = [];
+                clearRecordsDisplay();
+                showStatusMessage('statusMessage', 'Local records cleared', 'info');
+            }
+        }
+
+        // Records display functions
+        function loadRecordsForEmployee() {
+            const store = document.getElementById('storeSelect').value;
+            const employee = document.getElementById('employee').value;
             
-            if (!selectedStoreValue || !selectedEmployee) {
-                document.getElementById('recordsList').innerHTML = '<div class="no-records">Select store and employee to view records</div>';
-                document.getElementById('monthlyTotal').style.display = 'none';
+            if (!store || !employee) {
+                clearRecordsDisplay();
                 return;
             }
-
-            // Filter records
-            const filteredRecords = records.filter(record => 
-                record.store === selectedStoreValue && record.employee === selectedEmployee
-            );
-
-            displayRecords(filteredRecords);
+            
+            const employeeRecords = timeRecords.filter(record => 
+                record.store === store && record.employee === employee
+            ).sort((a, b) => new Date(b.date) - new Date(a.date));
+            
+            displayRecords(employeeRecords);
+            calculateMonthlyTotal(employeeRecords);
         }
 
         function displayRecords(records) {
             const recordsList = document.getElementById('recordsList');
-            const monthlyTotal = document.getElementById('monthlyTotal');
             
             if (records.length === 0) {
-                recordsList.innerHTML = '<div class="no-records">No work records found</div>';
-                monthlyTotal.style.display = 'none';
+                recordsList.innerHTML = '<div class="no-records">No records found for this employee</div>';
                 return;
             }
-
-            // Sort by date (newest first)
-            records.sort((a, b) => new Date(b.date) - new Date(a.date));
-
-            // Display recent records (last 10)
-            const recentRecords = records.slice(0, 10);
-            recordsList.innerHTML = recentRecords.map(record => `
-                <div class="record-item">
-                    <div>
-                        <div class="record-date">${formatDate(record.date)}</div>
-                        <div class="record-times">
-                            ⏰ ${record.startTime} - ${record.endTime}
+            
+            recordsList.innerHTML = records.slice(0, 10).map(record => {
+                const date = new Date(record.date).toLocaleDateString('de-DE');
+                const hours = record.totalHours?.toFixed(2) || calculateHours(record.startTime, record.endTime).toFixed(2);
+                
+                return `
+                    <div class="record-item">
+                        <div class="record-info">
+                            <div class="record-date">${date}</div>
+                            <div class="record-times">
+                                🕐 ${record.startTime} → ${record.endTime}
+                            </div>
                         </div>
+                        <div class="record-hours">${hours}h</div>
                     </div>
-                    <div class="record-hours">${record.hoursWorked}h</div>
-                </div>
-            `).join('');
+                `;
+            }).join('');
+        }
 
-            // Calculate monthly total
+        function calculateMonthlyTotal(records) {
             const currentMonth = new Date().getMonth();
             const currentYear = new Date().getFullYear();
             
@@ -1235,124 +1241,148 @@
                 const recordDate = new Date(record.date);
                 return recordDate.getMonth() === currentMonth && recordDate.getFullYear() === currentYear;
             });
-
-            const totalHours = monthlyRecords.reduce((sum, record) => sum + parseFloat(record.hoursWorked || 0), 0);
+            
+            const totalHours = monthlyRecords.reduce((sum, record) => {
+                return sum + (record.totalHours || calculateHours(record.startTime, record.endTime));
+            }, 0);
+            
+            const monthlyTotalDiv = document.getElementById('monthlyTotal');
+            const totalHoursDiv = document.getElementById('totalHours');
             
             if (totalHours > 0) {
-                document.getElementById('totalHours').textContent = `${totalHours.toFixed(1)} hours`;
-                monthlyTotal.style.display = 'block';
+                monthlyTotalDiv.style.display = 'block';
+                totalHoursDiv.textContent = `${totalHours.toFixed(1)} hours`;
             } else {
-                monthlyTotal.style.display = 'none';
+                monthlyTotalDiv.style.display = 'none';
             }
+        }
+
+        function clearRecordsDisplay() {
+            document.getElementById('recordsList').innerHTML = 
+                '<div class="no-records">Select store and employee to view records</div>';
+            document.getElementById('monthlyTotal').style.display = 'none';
         }
 
         function refreshRecords() {
-            loadTimeRecords();
-            showNotification('Records refreshed');
+            loadRecordsForEmployee();
+            showStatusMessage('statusMessage', 'Records refreshed', 'info');
+            setTimeout(() => clearStatusMessage(), 2000);
         }
 
-        function clearLocalRecords() {
-            if (confirm('Clear all local records? This cannot be undone.')) {
-                localStorage.removeItem('timeRecords');
-                loadTimeRecords();
-                showNotification('Local records cleared', 'warning');
-            }
+        // Utility functions
+        function clearForm() {
+            document.getElementById('startTime').value = '';
+            document.getElementById('endTime').value = '';
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('dateInput').value = today;
+            validateForm();
         }
 
-        // Manager Functions
+        function showStatusMessage(elementId, message, type) {
+            const statusDiv = document.getElementById(elementId);
+            statusDiv.textContent = message;
+            statusDiv.className = `status-message ${type}`;
+            statusDiv.style.display = 'block';
+            
+            setTimeout(() => {
+                statusDiv.style.display = 'none';
+            }, 5000);
+        }
+
+        function clearStatusMessage() {
+            const statusElements = ['statusMessage', 'loginStatusMessage'];
+            statusElements.forEach(id => {
+                const element = document.getElementById(id);
+                if (element) {
+                    element.style.display = 'none';
+                }
+            });
+        }
+
+        // Manager dashboard functions
         function openMasterSheet() {
             window.open(GOOGLE_SHEET_URL, '_blank');
         }
 
         function downloadStoreReport() {
-            const records = JSON.parse(localStorage.getItem('timeRecords') || '[]');
-            const selectedStoreValue = document.getElementById('storeSelect').value;
-            
-            if (!selectedStoreValue) {
-                showNotification('Please select a store first', 'warning');
+            const store = document.getElementById('storeSelect').value;
+            if (!store) {
+                alert('Please select a store first');
                 return;
             }
-
-            const storeRecords = records.filter(record => record.store === selectedStoreValue);
             
+            const storeRecords = timeRecords.filter(record => record.store === store);
             if (storeRecords.length === 0) {
-                showNotification('No records found for this store', 'warning');
+                alert('No records found for this store');
                 return;
             }
-
+            
             // Create CSV content
-            const headers = ['Date', 'Employee', 'Start Time', 'End Time', 'Hours Worked', 'Submitted By'];
-            const csvContent = [
+            const csvContent = generateCSVReport(storeRecords, store);
+            
+            // Download CSV
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            if (link.download !== undefined) {
+                const url = URL.createObjectURL(blob);
+                link.setAttribute('href', url);
+                link.setAttribute('download', `${store}_Report_${new Date().toISOString().split('T')[0]}.csv`);
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            }
+        }
+
+        function generateCSVReport(records, store) {
+            const headers = ['Date', 'Employee', 'Start Time', 'End Time', 'Total Hours', 'Submitted By', 'Submitted At'];
+            
+            const csvRows = [
                 headers.join(','),
-                ...storeRecords.map(record => [
+                ...records.map(record => [
                     record.date,
                     record.employee,
                     record.startTime,
                     record.endTime,
-                    record.hoursWorked,
-                    record.submittedBy || 'System'
+                    (record.totalHours || calculateHours(record.startTime, record.endTime)).toFixed(2),
+                    record.submittedBy || 'Unknown',
+                    record.submittedAt ? new Date(record.submittedAt).toLocaleString() : 'Unknown'
                 ].join(','))
-            ].join('\n');
-
-            // Download file
-            const blob = new Blob([csvContent], { type: 'text/csv' });
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `${selectedStoreValue}_TimeReport_${new Date().toISOString().split('T')[0]}.csv`;
-            a.click();
-            window.URL.revokeObjectURL(url);
-
-            showNotification('Report downloaded successfully');
+            ];
+            
+            return csvRows.join('\n');
         }
 
-        // Utility Functions
-        function formatDate(dateStr) {
-            const date = new Date(dateStr);
-            const today = new Date();
-            const yesterday = new Date(today);
-            yesterday.setDate(yesterday.getDate() - 1);
-
-            if (date.toDateString() === today.toDateString()) {
-                return 'Today';
-            } else if (date.toDateString() === yesterday.toDateString()) {
-                return 'Yesterday';
-            } else {
-                return date.toLocaleDateString('en-US', { 
-                    weekday: 'short', 
-                    month: 'short', 
-                    day: 'numeric' 
-                });
+        // Keyboard shortcuts
+        document.addEventListener('keydown', function(e) {
+            // Enter key to submit form (if all fields filled)
+            if (e.key === 'Enter' && !document.getElementById('submitBtn').disabled) {
+                if (document.getElementById('appContainer').style.display !== 'none') {
+                    submitTimeEntry();
+                } else if (document.getElementById('loginContainer').style.display !== 'none') {
+                    attemptLogin();
+                }
             }
-        }
+        });
 
-        function showMessage(element, message, type) {
-            element.textContent = message;
-            element.className = `status-message ${type}`;
-        }
+        // Error handling for offline scenarios
+        window.addEventListener('online', function() {
+            showNotification('Back online! Records will sync automatically.', 'success');
+        });
 
-        function clearMessage(element) {
-            element.className = 'status-message';
-        }
+        window.addEventListener('offline', function() {
+            showNotification('You are offline. Records will be saved locally.', 'warning');
+        });
 
-        function showNotification(message, type = 'success') {
+        function showNotification(message, type = 'info') {
             const notification = document.createElement('div');
             notification.className = `notification ${type}`;
             notification.textContent = message;
             document.body.appendChild(notification);
-
+            
             setTimeout(() => {
                 notification.remove();
-            }, 3000);
-        }
-
-        // Service Worker for offline functionality (optional)
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/sw.js')
-                    .then(() => console.log('SW registered'))
-                    .catch(() => console.log('SW registration failed'));
-            });
+            }, 4000);
         }
     </script>
 </body>
