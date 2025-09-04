@@ -168,16 +168,20 @@
             background: rgba(255,255,255,0.3);
         }
 
-        /* STORE SECTION - Modified for employees */
-        .store-display {
+        /* EMPLOYEE INFO DISPLAY - Only for employees */
+        .employee-info-section {
             margin-bottom: 25px;
+        }
+
+        .info-card {
             background: #e8f5e8;
             border-radius: 15px;
             padding: 20px;
             border: 2px solid #28a745;
+            margin-bottom: 15px;
         }
 
-        .store-display label {
+        .info-card label {
             display: block;
             margin-bottom: 10px;
             font-weight: 700;
@@ -185,7 +189,7 @@
             font-size: 16px;
         }
 
-        .store-value {
+        .info-value {
             background: white;
             padding: 16px;
             border-radius: 12px;
@@ -193,6 +197,7 @@
             font-weight: 600;
             color: #333;
             border: 2px solid #28a745;
+            text-align: center;
         }
 
         /* STORE SELECTION - For managers/owners only */
@@ -230,33 +235,6 @@
             border-color: #ff6b6b;
             transform: translateY(-2px);
             box-shadow: 0 8px 25px rgba(255, 193, 7, 0.3);
-        }
-
-        /* EMPLOYEE SECTION - Modified for employees */
-        .employee-display {
-            margin-bottom: 25px;
-            background: #e8f5e8;
-            border-radius: 15px;
-            padding: 20px;
-            border: 2px solid #28a745;
-        }
-
-        .employee-display label {
-            display: block;
-            margin-bottom: 10px;
-            font-weight: 700;
-            color: #155724;
-            font-size: 16px;
-        }
-
-        .employee-value {
-            background: white;
-            padding: 16px;
-            border-radius: 12px;
-            font-size: 16px;
-            font-weight: 600;
-            color: #333;
-            border: 2px solid #28a745;
         }
 
         /* EMPLOYEE SELECTION - For managers/owners only */
@@ -728,12 +706,19 @@
                     </select>
                 </div>
 
-                <!-- Store Display - For Employees -->
-                <div class="store-display" id="storeDisplayContainer" style="display: none;">
-                    <label>Your Store Location:</label>
-                    <div class="store-value" id="storeValue">Loading...</div>
+                <!-- Employee Information Display - Only for Employees -->
+                <div class="employee-info-section" id="employeeInfoSection" style="display: none;">
+                    <div class="info-card">
+                        <label>Your Store Location:</label>
+                        <div class="info-value" id="employeeStoreDisplay">Loading...</div>
+                    </div>
+                    <div class="info-card">
+                        <label>Employee Name:</label>
+                        <div class="info-value" id="employeeNameDisplay">Loading...</div>
+                    </div>
                 </div>
 
+                <!-- Admin Controls - Only for Managers/Owners -->
                 <div class="admin-controls" id="adminControls" style="display: none;">
                     <div class="admin-badge">Manager Access</div>
                     <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
@@ -748,12 +733,6 @@
                     <select id="employee" onchange="onEmployeeChange()">
                         <option value="">-- Select Store First --</option>
                     </select>
-                </div>
-
-                <!-- Employee Display - For regular employees -->
-                <div class="employee-display" id="employeeDisplayContainer" style="display: none;">
-                    <label>Submitting hours for:</label>
-                    <div class="employee-value" id="employeeValue">Loading...</div>
                 </div>
 
                 <div class="time-input-section">
@@ -799,7 +778,7 @@
 
                 <div class="records-section">
                     <div class="records-header">
-                        <h3>Recent Work Records</h3>
+                        <h3>Your Work Records</h3>
                         <div>
                             <button class="btn-small" onclick="refreshRecords()">Refresh</button>
                             <button class="clear-btn" onclick="clearLocalRecords()">Clear Local</button>
@@ -1020,35 +999,41 @@
         }
 
         function setupUserInterface() {
-            // Show/hide elements based on user role
             const isManagerOrOwner = currentUser.role === 'Manager' || currentUser.role === 'Owner';
             const isEmployee = currentUser.role === 'Employee';
 
-            // Store selection/display logic
             if (isEmployee) {
-                // Employees see their store as read-only display
-                const userStore = currentUser.stores[0]; // Employee only has one store
+                // EMPLOYEES: Show fixed store and name, hide all dropdowns
+                const userStore = currentUser.stores[0];
                 selectedStore = userStore;
                 
+                // Hide all manager/owner controls
                 document.getElementById('storeSelectContainer').style.display = 'none';
-                document.getElementById('storeDisplayContainer').style.display = 'block';
-                document.getElementById('storeValue').textContent = userStore;
+                document.getElementById('employeeSelectContainer').style.display = 'none';
+                document.getElementById('adminControls').style.display = 'none';
+                document.getElementById('managerDashboard').style.display = 'none';
+                
+                // Show employee info section
+                document.getElementById('employeeInfoSection').style.display = 'block';
+                document.getElementById('employeeStoreDisplay').textContent = userStore;
+                document.getElementById('employeeNameDisplay').textContent = currentUser.name;
                 
                 // Update store indicator
                 document.getElementById('storeIndicator').textContent = userStore;
                 document.getElementById('storeIndicator').style.background = STORES[userStore].color;
                 
-                // Employee name display (read-only)
-                document.getElementById('employeeSelectContainer').style.display = 'none';
-                document.getElementById('employeeDisplayContainer').style.display = 'block';
-                document.getElementById('employeeValue').textContent = currentUser.name;
+                // Load employee records immediately
+                setTimeout(() => {
+                    loadRecordsForEmployee();
+                }, 100);
                 
             } else if (isManagerOrOwner) {
-                // Managers/Owner see dropdowns
+                // MANAGERS/OWNERS: Show all controls
+                document.getElementById('employeeInfoSection').style.display = 'none';
                 document.getElementById('storeSelectContainer').style.display = 'block';
-                document.getElementById('storeDisplayContainer').style.display = 'none';
                 document.getElementById('employeeSelectContainer').style.display = 'block';
-                document.getElementById('employeeDisplayContainer').style.display = 'none';
+                document.getElementById('adminControls').style.display = 'block';
+                document.getElementById('managerDashboard').style.display = 'block';
                 
                 // Setup store dropdown
                 const storeSelect = document.getElementById('storeSelect');
@@ -1062,20 +1047,8 @@
                     option.textContent = store;
                     storeSelect.appendChild(option);
                 });
-                
-                // Show manager controls
-                document.getElementById('adminControls').style.display = 'block';
-                document.getElementById('managerDashboard').style.display = 'block';
             }
 
-            // Load initial records for employees
-            if (isEmployee) {
-                setTimeout(() => {
-                    loadRecordsForEmployee();
-                }, 100);
-            }
-
-            // Validate form with current setup
             validateForm();
         }
 
@@ -1084,11 +1057,8 @@
             document.getElementById('employee').innerHTML = '<option value="">-- Select Store First --</option>';
             document.getElementById('adminControls').style.display = 'none';
             document.getElementById('managerDashboard').style.display = 'none';
+            document.getElementById('employeeInfoSection').style.display = 'none';
             document.getElementById('adminMode').checked = false;
-            document.getElementById('storeSelectContainer').style.display = 'none';
-            document.getElementById('storeDisplayContainer').style.display = 'none';
-            document.getElementById('employeeSelectContainer').style.display = 'none';
-            document.getElementById('employeeDisplayContainer').style.display = 'none';
             clearStatusMessage();
             clearRecordsDisplay();
         }
@@ -1136,31 +1106,26 @@
             const employeeSelect = document.getElementById('employee');
             
             if (adminMode) {
-                // Allow selection of any employee in the store
                 employeeSelect.disabled = false;
-                document.getElementById('employeeSelectContainer').style.display = 'block';
-                document.getElementById('employeeDisplayContainer').style.display = 'none';
             } else {
-                // For managers, default back to their own name
                 if (currentUser.role === 'Manager') {
                     employeeSelect.value = currentUser.name;
-                    employeeSelect.disabled = false; // Keep enabled so manager can still submit for themselves
                 }
             }
             
             validateForm();
         }
 
-        // Form validation - Updated for employee restriction
+        // Form validation - SECURED for employees
         function validateForm() {
             let store, employee, date, startTime, endTime;
             
             if (currentUser.role === 'Employee') {
-                // For employees, use their fixed values
+                // EMPLOYEES: Always use their fixed store and name - NO EXCEPTIONS
                 store = currentUser.stores[0];
                 employee = currentUser.name;
             } else {
-                // For managers/owners, use dropdown values
+                // MANAGERS/OWNERS: Use dropdown values
                 store = document.getElementById('storeSelect').value;
                 employee = document.getElementById('employee').value;
             }
@@ -1182,12 +1147,11 @@
             validateForm();
         }
 
-        // Main submission function - Updated to handle employee restrictions
+        // SECURED submission function
         async function submitTimeEntry() {
             const submitBtn = document.getElementById('submitBtn');
             const originalText = submitBtn.textContent;
             
-            // Disable button and show loading
             submitBtn.disabled = true;
             submitBtn.textContent = 'Submitting...';
             
@@ -1195,10 +1159,10 @@
                 let formData;
                 
                 if (currentUser.role === 'Employee') {
-                    // For employees, use their fixed store and name
+                    // EMPLOYEES: FORCE their own store and name - CANNOT be overridden
                     formData = {
-                        store: currentUser.stores[0],
-                        employee: currentUser.name,
+                        store: currentUser.stores[0], // FIXED - employee's assigned store
+                        employee: currentUser.name,   // FIXED - employee's own name
                         date: document.getElementById('dateInput').value,
                         startTime: document.getElementById('startTime').value,
                         endTime: document.getElementById('endTime').value,
@@ -1206,7 +1170,7 @@
                         submittedAt: new Date().toISOString()
                     };
                 } else {
-                    // For managers/owners, use dropdown values
+                    // MANAGERS/OWNERS: Can use dropdown values
                     formData = {
                         store: document.getElementById('storeSelect').value,
                         employee: document.getElementById('employee').value,
@@ -1288,8 +1252,6 @@
                 body: JSON.stringify(data)
             });
             
-            // Note: due to no-cors mode, we can't check response status
-            // We'll assume success if no error is thrown
             return true;
         }
 
@@ -1315,16 +1277,16 @@
             }
         }
 
-        // Records display functions - Updated for employee restrictions
+        // SECURED Records display - employees only see their own
         function loadRecordsForEmployee() {
             let store, employee;
             
             if (currentUser.role === 'Employee') {
-                // For employees, use their fixed store and name
+                // EMPLOYEES: Always use their own data
                 store = currentUser.stores[0];
                 employee = currentUser.name;
             } else {
-                // For managers/owner, use dropdown values
+                // MANAGERS/OWNERS: Use dropdown values
                 store = document.getElementById('storeSelect').value;
                 employee = document.getElementById('employee').value;
             }
@@ -1346,7 +1308,10 @@
             const recordsList = document.getElementById('recordsList');
             
             if (records.length === 0) {
-                recordsList.innerHTML = '<div class="no-records">No records found for this employee</div>';
+                const message = currentUser.role === 'Employee' ? 
+                    'No records found yet' : 
+                    'No records found for this employee';
+                recordsList.innerHTML = `<div class="no-records">${message}</div>`;
                 return;
             }
             
@@ -1457,10 +1422,8 @@
                 return;
             }
             
-            // Create CSV content
             const csvContent = generateCSVReport(storeRecords, store);
             
-            // Download CSV
             const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
             const link = document.createElement('a');
             if (link.download !== undefined) {
@@ -1495,7 +1458,6 @@
 
         // Keyboard shortcuts
         document.addEventListener('keydown', function(e) {
-            // Enter key to submit form (if all fields filled)
             if (e.key === 'Enter' && !document.getElementById('submitBtn').disabled) {
                 if (document.getElementById('appContainer').style.display !== 'none') {
                     submitTimeEntry();
@@ -1524,3 +1486,6 @@
                 notification.remove();
             }, 4000);
         }
+    </script>
+</body>
+</html>
