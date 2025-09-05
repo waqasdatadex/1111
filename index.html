@@ -815,22 +815,65 @@
             employeeSelect.dispatchEvent(new Event('change'));
         }
 
+        // Check for duplicate entries
+        function checkForDuplicateEntry(employee, date) {
+            return timeRecords.some(record => 
+                record.employee === employee && 
+                record.date === date
+            );
+        }
+
+        // Show duplicate warning
+        function showDuplicateWarning(employee, date, existingEntry) {
+            const warningDiv = document.createElement('div');
+            warningDiv.className = 'status-message error';
+            warningDiv.innerHTML = `
+                <strong>⚠️ DUPLICATE ENTRY DETECTED</strong><br>
+                ${employee} already has an entry for ${new Date(date).toLocaleDateString('en-GB')}:<br>
+                <small>Existing: ${existingEntry.startTime} - ${existingEntry.endTime} (${existingEntry.hours}h)</small><br>
+                <div style="margin-top: 10px;">
+                    <button onclick="proceedWithDuplicate()" style="background: #dc3545; color: white; border: none; padding: 8px 16px; border-radius: 4px; margin-right: 10px; cursor: pointer;">Override & Submit</button>
+                    <button onclick="cancelDuplicate()" style="background: #6c757d; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">Cancel</button>
+                </div>
+            `;
+            
+            // Insert after status message
+            const statusMessage = document.getElementById('statusMessage');
+            statusMessage.parentNode.insertBefore(warningDiv, statusMessage.nextSibling);
+            
+            return warningDiv;
+        }
+
+        // Handle duplicate override
+        function proceedWithDuplicate() {
+            document.querySelector('.status-message.error').remove();
+            submitTimeEntry(true); // Force submission
+        }
+
+        // Handle duplicate cancellation
+        function cancelDuplicate() {
+            document.querySelector('.status-message.error').remove();
+            showMessage('Submission cancelled - duplicate entry exists', 'info');
+        }
         // Enhanced submit function with authentication
-        async function submitTimeEntry() {
+        async function submitTimeEntry(forceDuplicate = false) {
             const dateInput = document.getElementById('dateInput').value;
             const selectedEmployee = document.getElementById('employee').value;
             const startTime = document.getElementById('startTime').value;
             const endTime = document.getElementById('endTime').value;
             const adminMode = document.getElementById('adminMode')?.checked || false;
 
-            if (!selectedEmployee) {
-                showMessage('Please select an employee!', 'error');
-                return;
-            }
-
-            if (!dateInput) {
-                showMessage('Please select a date!', 'error');
-                return;
+            // Check for duplicate entries (unless forced)
+            if (!forceDuplicate) {
+                const existingEntry = timeRecords.find(record => 
+                    record.employee === selectedEmployee && 
+                    record.date === dateInput
+                );
+                
+                if (existingEntry) {
+                    showDuplicateWarning(selectedEmployee, dateInput, existingEntry);
+                    return;
+                }
             }
 
             if (!startTime || !endTime) {
