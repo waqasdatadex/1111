@@ -644,6 +644,15 @@
                 
                 const result = await response.json();
                 
+                if (result.status === 'duplicate') {
+                    const existingEntry = { 
+                        startTime: 'Unknown', 
+                        endTime: 'Unknown', 
+                        hours: 'Unknown' 
+                    };
+                    showDuplicateWarning(selectedEmployee, dateInput, existingEntry);
+                    return;
+                } else if (result.status === 'success') {
                 if (result.status === 'success') {
                     // Store authentication token
                     authToken = result.token;
@@ -845,9 +854,65 @@
         }
 
         // Handle duplicate override
-        function proceedWithDuplicate() {
+        async function proceedWithDuplicate() {
             document.querySelector('.status-message.error').remove();
-            submitTimeEntry(true); // Force submission
+            
+            const submitBtn = document.getElementById('submitBtn');
+            submitBtn.disabled = true;
+            submitBtn.textContent = '⏳ Overriding...';
+            
+            // Add forceDuplicate parameter to the form data
+            const dateInput = document.getElementById('dateInput').value;
+            const selectedEmployee = document.getElementById('employee').value;
+            const startTime = document.getElementById('startTime').value;
+            const endTime = document.getElementById('endTime').value;
+            const adminMode = document.getElementById('adminMode')?.checked || false;
+            
+            const start = new Date(`${dateInput}T${startTime}:00`);
+            let end = new Date(`${dateInput}T${endTime}:00`);
+            if (end <= start) end.setDate(end.getDate() + 1);
+            const hoursWorked = (end - start) / (1000 * 60 * 60);
+            
+            const formData = new FormData();
+            formData.append('action', 'submit');
+            formData.append('token', authToken);
+            formData.append('employee', selectedEmployee);
+            formData.append('date', dateInput);
+            formData.append('startTime', startTime);
+            formData.append('endTime', endTime);
+            formData.append('hours', Math.round(hoursWorked * 100) / 100);
+            formData.append('timestamp', new Date().toISOString());
+            formData.append('isAdminOverride', adminMode.toString());
+            formData.append('forceDuplicate', 'true'); // Key addition
+
+            try {
+                const response = await fetch(GOOGLE_SCRIPT_URL, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+                
+                if (result.status === 'success') {
+                    showMessage('⚠️ Duplicate entry overridden! Admin notified.', 'success');
+                    
+                    // Clear inputs
+                    document.getElementById('startTime').value = '';
+                    document.getElementById('endTime').value = '';
+                    
+                    // Update displays
+                    updateRecordsList();
+                    updateMonthlyTotal();
+                } else {
+                    throw new Error(result.message);
+                }
+                
+            } catch (error) {
+                showMessage(`Error: ${error.message}`, 'error');
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = '✅ Submit Work Hours';
+            }
         }
 
         // Handle duplicate cancellation
